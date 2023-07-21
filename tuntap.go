@@ -20,7 +20,6 @@ type Config struct {
 	Name       string
 	MultiQueue bool
 	Persist    bool
-	PacketInfo bool
 }
 
 type IfReq struct {
@@ -55,7 +54,7 @@ func setup(fd int, c Config) error {
 	ifreq := IfReq{}
 
 	copy(ifreq.Name[:], c.Name)
-
+	ifreq.Flags = syscall.IFF_NO_PI
 	if c.Type == TUN {
 		ifreq.Flags = syscall.IFF_TUN
 	} else {
@@ -64,11 +63,19 @@ func setup(fd int, c Config) error {
 	if c.MultiQueue {
 		ifreq.Flags |= IFF_MULTI_QUEUE
 	}
-	if !c.PacketInfo {
-		ifreq.Flags |= syscall.IFF_NO_PI
+	err := ioctl(uintptr(fd), syscall.TUNSETIFF, uintptr(unsafe.Pointer(&ifreq)))
+	if err != nil {
+		return err
 	}
 
-	err := ioctl(uintptr(fd), syscall.TUNSETIFF, uintptr(unsafe.Pointer(&ifreq)))
+	socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	if err != nil {
+		return err
+	}
+	defer syscall.Close(socket)
+
+	ifreq.Flags |= syscall.IFF_UP | syscall.IFF_RUNNING
+	err = ioctl(uintptr(socket), syscall.SIOCSIFFLAGS, uintptr(unsafe.Pointer(&ifreq)))
 	if err != nil {
 		return err
 	}
@@ -77,7 +84,6 @@ func setup(fd int, c Config) error {
 	if c.Persist {
 		value = 1
 	}
-
 	return ioctl(uintptr(fd), syscall.TUNSETPERSIST, uintptr(value))
 }
 
@@ -91,9 +97,6 @@ func ioctl(fd, request, arg uintptr) error {
 
 func (d *Device) Read(p []byte) (n int, err error) {
 	if len(p) == 0 {
-		// If the caller wanted a zero byte read, return immediately
-		// Otherwise syscall.Read returns 0, nil which looks like
-		// io.EOF.
 		return 0, nil
 	}
 	return syscall.Read(d.Fd, p)

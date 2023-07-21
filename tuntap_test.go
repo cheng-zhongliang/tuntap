@@ -4,9 +4,10 @@ import "testing"
 
 func TestNew(t *testing.T) {
 	c := Config{
-		Type:    TUN,
-		Name:    "test",
-		Persist: true,
+		Type:       TUN,
+		Name:       "tun1",
+		Persist:    false,
+		MultiQueue: false,
 	}
 
 	device, err := New(c)
@@ -14,5 +15,8 @@ func TestNew(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	device.Close()
+	err = device.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
